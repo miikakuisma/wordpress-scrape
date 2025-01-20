@@ -171,7 +171,7 @@ async function scanPluginDirectory(baseUrl: string): Promise<Plugin[]> {
 }
 
 // Add this function to detect theme
-function detectTheme($: cheerio.CheerioAPI, html: string): Theme | null {
+function detectTheme($: cheerio.CheerioAPI): Theme | null {
   let theme: Theme | null = null;
 
   // Method 1: Check style.css links
@@ -221,6 +221,131 @@ function detectTheme($: cheerio.CheerioAPI, html: string): Theme | null {
   }
 
   return theme;
+}
+
+// Add these helper functions
+async function checkPluginHeaders(baseUrl: string, pluginName: string): Promise<string | null> {
+  try {
+    // Try to read the main plugin file header
+    const response = await fetch(`${baseUrl}/wp-content/plugins/${pluginName}/${pluginName}.php`)
+    if (response.ok) {
+      const text = await response.text()
+      const versionMatch = text.match(/Version:\s*([0-9.]+)/) ||
+                          text.match(/\* Version:\s*([0-9.]+)/) ||
+                          text.match(/@version\s+([0-9.]+)/)
+      if (versionMatch) return versionMatch[1]
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+async function checkPluginChangelog(baseUrl: string, pluginName: string): Promise<string | null> {
+  try {
+    // Check common changelog files
+    for (const file of ['CHANGELOG.md', 'changelog.txt', 'CHANGES.md', 'changes.txt']) {
+      const response = await fetch(`${baseUrl}/wp-content/plugins/${pluginName}/${file}`)
+      if (response.ok) {
+        const text = await response.text()
+        const versionMatch = text.match(/[#\s]*(version|v)\s*([0-9.]+)/i) ||
+                           text.match(/^#+\s*([0-9.]+)/m)
+        if (versionMatch) return versionMatch[1] || versionMatch[2]
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+// Update the plugin detection section to include more patterns
+const PLUGIN_VERSION_PATTERNS = [
+  // Asset URLs
+  /\?ver=([0-9.]+)/,
+  /\.([0-9.]+)\.(?:min\.)?(?:js|css)/,
+  /\-([0-9.]+)\.(?:min\.)?(?:js|css)/,
+  /version[=\/-]([0-9.]+)/i,
+  // Inline scripts
+  /var\s+\w+_version\s*=\s*['"]([0-9.]+)['"]/,
+  /\.version\s*=\s*['"]([0-9.]+)['"]/,
+  /data-version=['"]([0-9.]+)['"]/,
+  // Common version declarations
+  /VERSION\s*[:=]\s*['"]([0-9.]+)['"]/i,
+  /plugin_version\s*=\s*['"]([0-9.]+)['"]/i,
+  // JSON data
+  /"version"\s*:\s*"([0-9.]+)"/,
+  // Additional patterns from StackExchange
+  /define\(['"]PLUGIN_VERSION['"],\s*['"]([0-9.]+)['"]\)/,
+  /define\(['"]VERSION['"],\s*['"]([0-9.]+)['"]\)/,
+  /\$version\s*=\s*['"]([0-9.]+)['"]/,
+  /version:\s*['"]([0-9.]+)['"]/i,
+  /@since\s+([0-9.]+)/,
+  /<!--\s*v([0-9.]+)\s*-->/,
+];
+
+// Add these new detection methods
+async function checkWPAjaxForPlugins(baseUrl: string): Promise<Plugin[]> {
+  const plugins: Plugin[] = [];
+  try {
+    // Try to access wp-admin/admin-ajax.php
+    const response = await fetch(`${baseUrl}/wp-admin/admin-ajax.php`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: 'action=update-plugin'
+    });
+    
+    if (response.ok) {
+      const text = await response.text();
+      // Look for plugin paths in error messages
+      const matches = text.match(/\/wp-content\/plugins\/([^\/'"]+)/g) || [];
+      matches.forEach(match => {
+        const name = match.split('/').pop();
+        if (name && !plugins.some(p => p.name === name)) {
+          plugins.push(createPlugin(name, null));
+        }
+      });
+    }
+  } catch {
+    // Silently fail
+  }
+  return plugins;
+}
+
+async function checkFeedForPlugins($: cheerio.CheerioAPI, baseUrl: string): Promise<Plugin[]> {
+  const plugins: Plugin[] = [];
+  try {
+    // Check RSS and Atom feeds
+    const feedUrls = [
+      `${baseUrl}/feed/`,
+      `${baseUrl}/feed/atom/`,
+      `${baseUrl}/comments/feed/`
+    ];
+
+    await Promise.all(feedUrls.map(async (feedUrl) => {
+      const response = await fetch(feedUrl);
+      if (response.ok) {
+        const text = await response.text();
+        const feedDoc = cheerio.load(text, { xmlMode: true });
+        
+        // Look for plugin traces in feed content
+        const content = feedDoc.html();
+        const pluginMatches = content.match(/\/wp-content\/plugins\/([^\/'"]+)/g) || [];
+        
+        pluginMatches.forEach(match => {
+          const name = match.split('/').pop();
+          if (name && !plugins.some(p => p.name === name)) {
+            plugins.push(createPlugin(name, null));
+          }
+        });
+      }
+    }));
+  } catch {
+    // Silently fail
+  }
+  return plugins;
 }
 
 export async function POST(req: Request) {
@@ -345,12 +470,18 @@ export async function POST(req: Request) {
           const name = match[1]
           // Skip if we already found this plugin
           if (!plugins.some(p => p.name.toLowerCase() === name.toLowerCase())) {
-            const versionMatch = 
-              src.match(/\?ver=([0-9.]+)/) ||
-              src.match(/\.([0-9.]+)\.(?:min\.)?(?:js|css)/) ||
-              src.match(/\-([0-9.]+)\.(?:min\.)?(?:js|css)/) ||
-              src.match(/version[=\/-]([0-9.]+)/i)
-            plugins.push(createPlugin(name, versionMatch?.[1] || null));
+            let version: string | null = null;
+            
+            // Check all version patterns
+            for (const pattern of PLUGIN_VERSION_PATTERNS) {
+              const versionMatch = src.match(pattern)
+              if (versionMatch) {
+                version = versionMatch[1]
+                break
+              }
+            }
+
+            plugins.push(createPlugin(name, version))
           }
         }
       }
@@ -459,9 +590,88 @@ export async function POST(req: Request) {
         plugins.push(plugin);
       }
     });
-
     // Detect theme
-    const theme = detectTheme($, html);
+    const theme = detectTheme($);
+
+    // Add additional version detection for plugins without versions
+    await Promise.all(
+      plugins.map(async (plugin) => {
+        if (!plugin.versionDetected) {
+          // Try plugin headers
+          const headerVersion = await checkPluginHeaders(new URL(url).origin, plugin.name)
+          if (headerVersion) {
+            plugin.version = headerVersion
+            plugin.versionDetected = true
+            return
+          }
+
+          // Try changelog
+          const changelogVersion = await checkPluginChangelog(new URL(url).origin, plugin.name)
+          if (changelogVersion) {
+            plugin.version = changelogVersion
+            plugin.versionDetected = true
+            return
+          }
+
+          // Check for version in inline scripts
+          $('script').each((_, elem) => {
+            if (plugin.versionDetected) return;
+            const scriptContent = $(elem).html() || ''
+            if (scriptContent.includes(plugin.name)) {
+              for (const pattern of PLUGIN_VERSION_PATTERNS) {
+                const match = scriptContent.match(pattern)
+                if (match) {
+                  plugin.version = match[1]
+                  plugin.versionDetected = true
+                  break
+                }
+              }
+            }
+          })
+        }
+      })
+    )
+
+    // Check admin-ajax.php for plugin traces
+    const ajaxPlugins = await checkWPAjaxForPlugins(new URL(url).origin);
+    ajaxPlugins.forEach(plugin => {
+      if (!plugins.some(p => p.name === plugin.name)) {
+        plugins.push(plugin);
+      }
+    });
+
+    // Check feeds for plugin traces
+    const feedPlugins = await checkFeedForPlugins($, new URL(url).origin);
+    feedPlugins.forEach(plugin => {
+      if (!plugins.some(p => p.name === plugin.name)) {
+        plugins.push(plugin);
+      }
+    });
+
+    // Try to detect plugins from error pages
+    const errorUrls = [
+      '/wp-content/plugins/nonexistent-plugin',
+      '/?p=999999999'
+    ];
+
+    await Promise.all(errorUrls.map(async (errorUrl) => {
+      try {
+        const response = await fetch(`${new URL(url).origin}${errorUrl}`);
+        const text = await response.text();
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const errorDoc = cheerio.load(text);
+        const pluginMatches = text.match(/\/wp-content\/plugins\/([^\/'"]+)/g) || [];
+        
+        pluginMatches.forEach(match => {
+          const name = match.split('/').pop();
+          if (name && !plugins.some(p => p.name === name)) {
+            plugins.push(createPlugin(name, null));
+          }
+        });
+      } catch {
+        // Silently fail
+      }
+    }));
 
     return NextResponse.json({
       title,

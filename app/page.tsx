@@ -1,8 +1,27 @@
 'use client';
 
 import { useState, useRef } from 'react';
-// @ts-ignore (html2pdf doesn't have TypeScript types)
+// @ts-expect-error (html2pdf doesn't have TypeScript types)
 import html2pdf from 'html2pdf.js';
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { tomorrow } from 'react-syntax-highlighter/dist/cjs/styles/prism';
+
+// Update the markdown styles
+const markdownStyles = {
+  h1: "text-2xl font-bold mb-4",
+  h2: "text-xl font-semibold mb-3",
+  h3: "text-lg font-medium mb-2",
+  p: "mb-4",
+  ul: "list-disc pl-5 mb-4 space-y-1",
+  ol: "list-decimal pl-5 mb-4 space-y-1",
+  li: "mb-1",
+  strong: "font-semibold",
+  em: "italic",
+  blockquote: "border-l-4 border-gray-300 pl-4 my-4",
+  code: "bg-gray-100 rounded px-1.5 py-0.5 font-mono text-sm text-blue-600",
+  pre: "bg-transparent rounded p-0 mb-4 overflow-x-auto",
+};
 
 export default function Home() {
   const [url, setUrl] = useState('https://smvt.fi');
@@ -222,8 +241,41 @@ export default function Home() {
                 {analysis && (
                   <div className="mb-6">
                     <h3 className="font-medium text-lg">Tekoälyn turvallisuusanalyysi</h3>
-                    <div className="mt-2 p-4 bg-blue-50 rounded-lg whitespace-pre-wrap">
-                      {analysis}
+                    <div className="mt-2 p-4 bg-blue-50 rounded-lg prose prose-blue max-w-none">
+                      <ReactMarkdown
+                        components={{
+                          h1: ({node, ...props}) => <h1 className={markdownStyles.h1} {...props} />,
+                          h2: ({node, ...props}) => <h2 className={markdownStyles.h2} {...props} />,
+                          h3: ({node, ...props}) => <h3 className={markdownStyles.h3} {...props} />,
+                          p: ({node, ...props}) => <p className={markdownStyles.p} {...props} />,
+                          ul: ({node, ...props}) => <ul className={markdownStyles.ul} {...props} />,
+                          ol: ({node, ...props}) => <ol className={markdownStyles.ol} {...props} />,
+                          li: ({node, ...props}) => <li className={markdownStyles.li} {...props} />,
+                          strong: ({node, ...props}) => <strong className={markdownStyles.strong} {...props} />,
+                          em: ({node, ...props}) => <em className={markdownStyles.em} {...props} />,
+                          blockquote: ({node, ...props}) => <blockquote className={markdownStyles.blockquote} {...props} />,
+                          code: ({node, inline, className, children, ...props}) => {
+                            const match = /language-(\w+)/.exec(className || '');
+                            return !inline ? (
+                              <SyntaxHighlighter
+                                style={tomorrow}
+                                language={match ? match[1] : 'text'}
+                                PreTag="div"
+                                className="rounded-md"
+                                {...props}
+                              >
+                                {String(children).replace(/\n$/, '')}
+                              </SyntaxHighlighter>
+                            ) : (
+                              <code className={markdownStyles.code} {...props}>
+                                {children}
+                              </code>
+                            )
+                          }
+                        }}
+                      >
+                        {analysis}
+                      </ReactMarkdown>
                     </div>
                   </div>
                 )}
