@@ -158,7 +158,7 @@ export default function Home() {
                       <>
                         <p>
                           <span className="font-medium">WordPress versio:</span>{' '}
-                          <span className="flex items-center gap-2 inline-flex">
+                          <span className="flex items-center gap-2">
                             {result.wpVersion}
                             {result.wpVersion !== "Unknown" && (
                               result.isWPUpToDate ? 
@@ -186,34 +186,30 @@ export default function Home() {
                   <div className="mb-6">
                     <h3 className="font-medium text-lg">Havaitut lisäosat</h3>
                     <ul className="mt-2 space-y-1">
-                      {result.plugins.map((plugin: {
-                        name: string;
-                        version: string;
-                        latestVersion?: string;
-                        isUpToDate?: boolean;
-                        versionDetected: boolean;
-                      }, index: number) => (
-                        <li key={index} className="flex items-center gap-2">
-                          <span>{plugin.name}</span>
-                          <span className="text-gray-600">
-                            {plugin.versionDetected ? (
-                              <>
-                                (v{plugin.version}
-                                {plugin.latestVersion && plugin.latestVersion !== plugin.version && 
-                                  ` → ${plugin.latestVersion}`}
-                                )
-                              </>
-                            ) : (
-                              '(versio ei tiedossa)'
-                            )}
-                          </span>
-                          {plugin.isUpToDate !== undefined && (
-                            <span className="ml-2">
-                              {plugin.isUpToDate ? '✅ Ajan tasalla' : '⚠️ Päivitys saatavilla'}
+                      {result.plugins
+                        .filter((plugin: { versionDetected: boolean }) => plugin.versionDetected)  // Only show plugins with detected versions
+                        .map((plugin: {
+                          name: string;
+                          version: string;
+                          latestVersion?: string;
+                          isUpToDate?: boolean;
+                          versionDetected: boolean;
+                        }, index: number) => (
+                          <li key={index} className="flex items-center gap-2">
+                            <span>{plugin.name}</span>
+                            <span className="text-gray-600">
+                              (v{plugin.version}
+                              {plugin.latestVersion && plugin.latestVersion !== plugin.version && 
+                                ` → ${plugin.latestVersion}`}
+                              )
                             </span>
-                          )}
-                        </li>
-                      ))}
+                            {plugin.isUpToDate !== undefined && (
+                              <span className="ml-2">
+                                {plugin.isUpToDate ? '✅ Ajan tasalla' : '⚠️ Päivitys saatavilla'}
+                              </span>
+                            )}
+                          </li>
+                        ))}
                     </ul>
                   </div>
                 )}
