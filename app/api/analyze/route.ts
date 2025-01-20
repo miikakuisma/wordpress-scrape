@@ -35,7 +35,7 @@ Please provide:
 
     const completion = await openai.chat.completions.create({
       messages: [{ role: "user", content: prompt }],
-      model: "gpt-4o-mini",
+      model: "gpt-3.5-turbo",
     })
 
     return NextResponse.json({
