@@ -1,9 +1,23 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { OpenAI } from 'openai'
 import { NextResponse } from 'next/server'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
+  timeout: 60000,
 })
+
+async function retryWithBackoff(fn: () => Promise<any>, maxRetries = 3): Promise<any> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (i === maxRetries - 1) throw error;
+      // Wait 2^i * 1000 ms between retries (1s, 2s, 4s)
+      await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+    }
+  }
+}
 
 export async function POST(req: Request) {
   try {
@@ -33,10 +47,12 @@ Please provide:
 3. Priority list of actions needed
 `
 
-    const completion = await openai.chat.completions.create({
-      messages: [{ role: "user", content: prompt }],
-      model: "gpt-4o-mini",
-    })
+    const completion = await retryWithBackoff(() => 
+      openai.chat.completions.create({
+        messages: [{ role: "user", content: prompt }],
+        model: "gpt-4o-mini",
+      })
+    );
 
     return NextResponse.json({
       analysis: completion.choices[0].message.content
