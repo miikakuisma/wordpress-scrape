@@ -106,12 +106,21 @@ async function checkPluginReadme(baseUrl: string, pluginName: string): Promise<{
     const response = await fetch(`${baseUrl}/wp-content/plugins/${pluginName}/readme.txt`);
     if (response.ok) {
       const text = await response.text();
-      const nameMatch = text.match(/=== (.+) ===/) || text.match(/Plugin Name:\s*(.+)$/m);
+      const nameMatch = text.match(/=== (.+?) ===/) || text.match(/Plugin Name:\s*(.+?)(?:\n|$)/m);
       const versionMatch = text.match(/Stable tag:\s*([0-9.]+)/) || 
                           text.match(/Version:\s*([0-9.]+)/);
       
+      // Clean up plugin name by removing HTML/markdown and extra whitespace
+      const cleanName = nameMatch ? 
+        nameMatch[1]
+          .replace(/[<>]/g, '') // Remove HTML tags
+          .replace(/[`*_~]/g, '') // Remove markdown formatting
+          .replace(/\s+/g, ' ') // Normalize whitespace
+          .trim() 
+        : null;
+      
       return {
-        name: nameMatch ? nameMatch[1].trim() : null,
+        name: cleanName,
         version: versionMatch ? versionMatch[1] : null
       };
     }

@@ -293,7 +293,7 @@ export default function Home() {
                   </svg>
                   Vie raportti PDF-tiedostoksi
                 </button>
-              </div>
+        </div>
             )}
           </>
         )}
