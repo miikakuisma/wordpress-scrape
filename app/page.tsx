@@ -39,7 +39,7 @@ export default function Home() {
   return (
     <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
       <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <h1 className="text-3xl font-bold mb-6">Website Scraper</h1>
+        <h1 className="text-3xl font-bold mb-6">WordPress Sivuston Tarkistus</h1>
         
         <form onSubmit={handleSubmit} className="mb-8">
           <div className="flex gap-4">
@@ -47,7 +47,7 @@ export default function Home() {
               type="url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              placeholder="Enter website URL"
+              placeholder="Syötä verkkosivun osoite"
               required
               className="flex-1 p-2 border rounded"
             />
@@ -56,7 +56,7 @@ export default function Home() {
               disabled={loading}
               className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-blue-300"
             >
-              {loading ? 'Scraping...' : 'Scrape'}
+              {loading ? 'Tarkistetaan...' : 'Tarkista'}
             </button>
           </div>
         </form>
@@ -69,29 +69,30 @@ export default function Home() {
 
         {result && (
           <div className="space-y-4 w-full max-w-3xl">
-            <h2 className="text-xl font-semibold">Results:</h2>
+            <h2 className="text-xl font-semibold">Tulokset:</h2>
             <div className="bg-gray-50 p-6 rounded-lg shadow-sm">
               <div className="mb-6">
-                <h3 className="font-medium text-lg">Basic Information</h3>
+                <h3 className="font-medium text-lg">Perustiedot</h3>
                 <div className="mt-2 space-y-2">
-                  <p><span className="font-medium">Title:</span> {result.title}</p>
-                  <p><span className="font-medium">Meta Description:</span> {result.metaDescription || 'No meta description found'}</p>
+                  <p><span className="font-medium">Sivuston otsikko:</span> {result.title}</p>
+                  <p><span className="font-medium">Meta kuvaus:</span> {result.metaDescription || 'Ei meta kuvausta'}</p>
                 </div>
               </div>
 
               <div className="mb-6">
-                <h3 className="font-medium text-lg">WordPress Information</h3>
+                <h3 className="font-medium text-lg">WordPress Tiedot</h3>
                 <div className="mt-2 space-y-2">
                   <p>
-                    <span className="font-medium">WordPress Site:</span>{' '}
-                    {result.isWordPress ? '✅ Yes' : '❌ No'}
+                    <span className="font-medium">WordPress-sivusto:</span>{' '}
+                    {result.isWordPress ? '✅ Kyllä' : '❌ Ei'}
                   </p>
                   {result.isWordPress && (
                     <>
-                      <p><span className="font-medium">WordPress Version:</span> {result.wpVersion}</p>
-                      <p><span className="font-medium">PHP Version:</span> {result.phpVersion}</p>
-                      <p><span className="font-medium">Up to Date:</span> {result.isWPUpToDate ? '✅ Yes' : '❌ No'}</p>
-                      <p><span className="font-medium">Security Plugin:</span> {result.hasSecurityPlugin ? '✅ Detected' : '⚠️ Not detected'}</p>
+                      <p><span className="font-medium">WordPress versio:</span> {result.wpVersion}</p>
+                      <p><span className="font-medium">PHP versio:</span> {result.phpVersion}</p>
+                      <p><span className="font-medium">Apache versio:</span> {result.apacheVersion}</p>
+                      <p><span className="font-medium">Ajan tasalla:</span> {result.isWPUpToDate ? '✅ Kyllä' : '❌ Ei'}</p>
+                      <p><span className="font-medium">Tietoturvalisäosa:</span> {result.hasSecurityPlugin ? '✅ Löytyi' : '⚠️ Ei löytynyt'}</p>
                     </>
                   )}
                 </div>
@@ -99,7 +100,7 @@ export default function Home() {
 
               {result.plugins.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="font-medium text-lg">Detected Plugins</h3>
+                  <h3 className="font-medium text-lg">Havaitut lisäosat</h3>
                   <ul className="mt-2 space-y-1">
                     {result.plugins.map((plugin: {
                       name: string;
@@ -117,7 +118,7 @@ export default function Home() {
                         </span>
                         {plugin.isUpToDate !== undefined && (
                           <span className="ml-2">
-                            {plugin.isUpToDate ? '✅' : '⚠️'}
+                            {plugin.isUpToDate ? '✅ Ajan tasalla' : '⚠️ Päivitys saatavilla'}
                           </span>
                         )}
                       </li>
