@@ -8,6 +8,14 @@ interface Plugin {
   version: string;
   latestVersion?: string;
   isUpToDate?: boolean;
+  versionDetected: boolean;
+}
+
+interface Theme {
+  name: string;
+  version: string | null;
+  isChild: boolean;
+  parentTheme?: string;
 }
 
 async function getLatestPluginVersion(pluginSlug: string): Promise<string | null> {
@@ -27,6 +35,192 @@ function normalizePluginSlug(name: string): string {
     .replace(/[^a-z0-9-]/g, '-') // Replace non-alphanumeric chars with hyphens
     .replace(/-+/g, '-')         // Replace multiple hyphens with single
     .replace(/^-|-$/g, '');      // Remove leading/trailing hyphens
+}
+
+// Add these patterns for premium plugin detection
+const PREMIUM_PLUGIN_PATTERNS = [
+  {
+    name: 'RevSlider',
+    patterns: [
+      /revslider\/public\/assets\/js\/rs6\.min\.js\?ver=([0-9.]+)/,
+      /revslider\/public\/assets\/css\/rs6\.css\?ver=([0-9.]+)/,
+      /\/plugins\/revslider\/.*?ver=([0-9.]+)/,
+      /"revSliderVersion":"([0-9.]+)"/,
+    ]
+  },
+  {
+    name: 'WPBakery Page Builder',
+    patterns: [
+      /js_composer\/assets\/js\/dist\/js_composer_front\.min\.js\?ver=([0-9.]+)/,
+      /js_composer\/assets\/css\/js_composer\.min\.css\?ver=([0-9.]+)/,
+      /"vcVersion":"([0-9.]+)"/,
+    ]
+  },
+  {
+    name: 'Advanced Custom Fields Pro',
+    patterns: [
+      /advanced-custom-fields-pro\/assets\/build\/js\/acf\.min\.js\?ver=([0-9.]+)/,
+      /advanced-custom-fields-pro\/assets\/build\/css\/acf\.min\.css\?ver=([0-9.]+)/,
+    ]
+  },
+  {
+    name: 'Elementor Pro',
+    patterns: [
+      /elementor-pro\/assets\/js\/frontend\.min\.js\?ver=([0-9.]+)/,
+      /elementor-pro\/assets\/css\/frontend\.min\.css\?ver=([0-9.]+)/,
+    ]
+  }
+];
+
+function createPlugin(name: string, version: string | null): Plugin {
+  return {
+    name,
+    version: version || "Unknown",
+    versionDetected: version !== null && version !== "Unknown"
+  };
+}
+
+function detectPremiumPlugins($: cheerio.CheerioAPI, html: string): Plugin[] {
+  const premiumPlugins: Plugin[] = [];
+  
+  PREMIUM_PLUGIN_PATTERNS.forEach(({ name, patterns }) => {
+    if (premiumPlugins.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+      return;
+    }
+
+    for (const pattern of patterns) {
+      const match = html.match(pattern);
+      if (match) {
+        premiumPlugins.push(createPlugin(name, match[1]));
+        break;
+      }
+    }
+  });
+
+  // Check for inline scripts that might contain version info
+  $('script').each((_, elem) => {
+    const scriptContent = $(elem).html() || '';
+    PREMIUM_PLUGIN_PATTERNS.forEach(({ name, patterns }) => {
+      if (!premiumPlugins.some(p => p.name === name)) {
+        for (const pattern of patterns) {
+          const match = scriptContent.match(pattern);
+          if (match) {
+            premiumPlugins.push(createPlugin(name, match[1]));
+            break;
+          }
+        }
+      }
+    });
+  });
+
+  return premiumPlugins;
+}
+
+// Add this function near the other helper functions
+async function scanPluginDirectory(baseUrl: string): Promise<Plugin[]> {
+  const plugins: Plugin[] = [];
+  try {
+    // Try to list the plugins directory
+    const response = await fetch(`${baseUrl}/wp-content/plugins/`)
+    if (!response.ok) return plugins;
+
+    const html = await response.text()
+    const $ = cheerio.load(html)
+
+    // Look for directory listings
+    $('a, td a').each((_, elem) => {
+      const href = $(elem).attr('href') || ''
+      const text = $(elem).text().trim()
+      
+      // Common directory listing patterns
+      if (
+        (href.endsWith('/') || text.endsWith('/')) && 
+        !href.includes('..') && 
+        !['Parent Directory', '..', '.'].includes(text)
+      ) {
+        const pluginName = href.replace(/\/$/, '') || text.replace(/\/$/, '')
+        if (pluginName && !plugins.some(p => p.name === pluginName)) {
+          plugins.push(createPlugin(pluginName, null))
+        }
+      }
+    })
+
+    // Also try to read readme.txt or readme.md files for each found plugin
+    await Promise.all(
+      plugins.map(async (plugin) => {
+        try {
+          const readmeResponse = await fetch(`${baseUrl}/wp-content/plugins/${plugin.name}/readme.txt`)
+          if (readmeResponse.ok) {
+            const readmeText = await readmeResponse.text()
+            const versionMatch = readmeText.match(/Stable tag:\s*([0-9.]+)/) ||
+                               readmeText.match(/Version:\s*([0-9.]+)/)
+            if (versionMatch) {
+              plugin.version = versionMatch[1]
+              plugin.versionDetected = true
+            }
+          }
+        } catch {
+          // Silently fail if readme.txt is not accessible
+        }
+      })
+    )
+  } catch {
+    // Silently fail if directory listing is not enabled
+  }
+  return plugins
+}
+
+// Add this function to detect theme
+function detectTheme($: cheerio.CheerioAPI, html: string): Theme | null {
+  let theme: Theme | null = null;
+
+  // Method 1: Check style.css links
+  $('link[rel="stylesheet"]').each((_, elem) => {
+    const href = $(elem).attr('href') || ''
+    const themeMatch = href.match(/\/wp-content\/themes\/([^/]+)/)
+    if (themeMatch) {
+      const name = themeMatch[1]
+      const versionMatch = href.match(/\?ver=([0-9.]+)/)
+      
+      theme = {
+        name,
+        version: versionMatch?.[1] || null,
+        isChild: false
+      }
+    }
+  })
+
+  // Method 2: Check meta tags
+  const themeMetaTag = $('meta[name="template"]').attr('content') ||
+                      $('meta[name="generator"]').attr('content')
+  if (themeMetaTag) {
+    const themeMatch = themeMetaTag.match(/theme:\s*([^,\s]+)/i)
+    if (themeMatch) {
+      theme = theme || {
+        name: themeMatch[1],
+        version: null,
+        isChild: false
+      }
+    }
+  }
+
+  // Method 3: Check for child theme
+  if (theme) {
+    const parentThemeLink = $('link[rel="stylesheet"][href*="/wp-content/themes/"]').filter((_, elem) => {
+      const href = $(elem).attr('href') || ''
+      return href.includes('/themes/') && !href.includes(`/themes/${theme?.name}/`)
+    })
+
+    if (parentThemeLink.length) {
+      const parentMatch = parentThemeLink.attr('href')?.match(/\/themes\/([^/]+)/)
+      if (parentMatch) {
+        theme.isChild = true
+        theme.parentTheme = parentMatch[1]
+      }
+    }
+  }
+
+  return theme;
 }
 
 export async function POST(req: Request) {
@@ -149,14 +343,14 @@ export async function POST(req: Request) {
         const match = src.match(/\/wp-content\/plugins\/([^/]+)/)
         if (match) {
           const name = match[1]
-          // Check multiple version patterns
-          const versionMatch = 
-            src.match(/\?ver=([0-9.]+)/) ||
-            src.match(/\.([0-9.]+)\.(?:min\.)?(?:js|css)/) ||
-            src.match(/\-([0-9.]+)\.(?:min\.)?(?:js|css)/)
-          const version = versionMatch?.[1] || "Unknown"
-          if (!plugins.some(p => p.name === name)) {
-            plugins.push({ name, version })
+          // Skip if we already found this plugin
+          if (!plugins.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+            const versionMatch = 
+              src.match(/\?ver=([0-9.]+)/) ||
+              src.match(/\.([0-9.]+)\.(?:min\.)?(?:js|css)/) ||
+              src.match(/\-([0-9.]+)\.(?:min\.)?(?:js|css)/) ||
+              src.match(/version[=\/-]([0-9.]+)/i)
+            plugins.push(createPlugin(name, versionMatch?.[1] || null));
           }
         }
       }
@@ -172,7 +366,7 @@ export async function POST(req: Request) {
       if (pluginMatch) {
         const [, name, version] = pluginMatch
         if (!plugins.some(p => p.name === name)) {
-          plugins.push({ name, version })
+          plugins.push(createPlugin(name, version))
         }
       }
     })
@@ -183,7 +377,7 @@ export async function POST(req: Request) {
                    $(elem).attr('rel')?.replace('generator-', '')
       const version = $(elem).attr('content') || $(elem).attr('href')?.match(/\?ver=([0-9.]+)/)?.[1]
       if (name && version && !plugins.some(p => p.name === name)) {
-        plugins.push({ name, version })
+        plugins.push(createPlugin(name, version))
       }
     })
 
@@ -191,13 +385,13 @@ export async function POST(req: Request) {
     try {
       const apiResponse = await fetch(`${new URL(url).origin}/wp-json/`)
       if (apiResponse.ok) {
-        const apiData = await apiResponse.json()
+        const apiData = await apiResponse.json() as { namespaces?: string[] }
         const namespaces = apiData?.namespaces || []
         namespaces.forEach((namespace: string) => {
           if (namespace !== 'wp/v2' && !namespace.startsWith('core')) {
             const name = namespace.split('/')[0]
             if (!plugins.some(p => p.name === name)) {
-              plugins.push({ name, version: "Unknown" })
+              plugins.push(createPlugin(name, null))
             }
           }
         })
@@ -246,6 +440,29 @@ export async function POST(req: Request) {
       })
     )
 
+    // Add directory scanning results
+    try {
+      const directoryPlugins = await scanPluginDirectory(new URL(url).origin)
+      directoryPlugins.forEach(plugin => {
+        if (!plugins.some(p => p.name === plugin.name)) {
+          plugins.push(plugin)
+        }
+      })
+    } catch {
+      console.log('Failed to scan plugin directory')
+    }
+
+    // Add premium plugins detection
+    const premiumPlugins = detectPremiumPlugins($, html);
+    premiumPlugins.forEach(plugin => {
+      if (!plugins.some(p => p.name === plugin.name)) {
+        plugins.push(plugin);
+      }
+    });
+
+    // Detect theme
+    const theme = detectTheme($, html);
+
     return NextResponse.json({
       title,
       metaDescription,
@@ -256,6 +473,7 @@ export async function POST(req: Request) {
       plugins,
       hasSecurityPlugin,
       isWPUpToDate,
+      theme,
     })
 
   } catch (error) {
