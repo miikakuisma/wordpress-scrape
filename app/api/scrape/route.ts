@@ -3,6 +3,11 @@ import fetch from "node-fetch"
 import * as cheerio from "cheerio"
 import semver from "semver"
 
+interface Plugin {
+  name: string;
+  version: string;
+}
+
 export async function POST(req: Request) {
   try {
     const { url } = await req.json()
@@ -60,7 +65,7 @@ export async function POST(req: Request) {
           const readmeMatch = readmeHtml.match(/Version\s+([\d.]+)/)
           if (readmeMatch) wpVersionMatch = readmeMatch
         }
-      } catch (e) {
+      } catch {
         console.log('Failed to check readme.html')
       }
     }
@@ -92,7 +97,7 @@ export async function POST(req: Request) {
           const phpinfoHtml = await phpinfoResponse.text()
           phpVersionMatch = phpinfoHtml.match(/PHP Version\s+([\d.]+)/)
         }
-      } catch (e) {
+      } catch {
         console.log('Failed to check phpinfo.php')
       }
     }
@@ -102,7 +107,7 @@ export async function POST(req: Request) {
     }
 
     // Enhanced plugin detection
-    const plugins: { name: string; version: string }[] = []
+    const plugins: Plugin[] = []
     
     // Method 1: Check stylesheets and scripts
     $('link[rel="stylesheet"], script').each((_, elem) => {
@@ -133,7 +138,7 @@ export async function POST(req: Request) {
     })
 
     // Security check
-    const hasSecurityPlugin = plugins.some((plugin) =>
+    const hasSecurityPlugin = plugins.some((plugin: Plugin) =>
       [
         "wordfence",
         "sucuri-scanner", 

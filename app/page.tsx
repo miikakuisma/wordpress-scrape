@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import Image from "next/image";
 
 export default function Home() {
   const [url, setUrl] = useState('https://mediaguru.fi');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +101,7 @@ export default function Home() {
                 <div className="mb-6">
                   <h3 className="font-medium text-lg">Detected Plugins</h3>
                   <ul className="mt-2 space-y-1">
-                    {result.plugins.map((plugin, index) => (
+                    {result.plugins.map((plugin: {name: string, version: string}, index: number) => (
                       <li key={index}>
                         {plugin.name} (v{plugin.version})
                       </li>
