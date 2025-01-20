@@ -101,6 +101,7 @@ export default function Home() {
     await generatePdf(resultsRef.current);
   };
 
+  console.log(result?.plugins)
   return (
     <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-4 pb-20 gap-8 sm:p-8 md:p-20 font-[family-name:var(--font-geist-sans)]">
       <main className="flex flex-col gap-8 row-start-2 items-center w-full max-w-4xl mx-auto">
@@ -187,7 +188,7 @@ export default function Home() {
                     <h3 className="font-medium text-lg">Havaitut lisäosat</h3>
                     <ul className="mt-2 space-y-1">
                       {result.plugins
-                        .filter((plugin: { versionDetected: boolean }) => plugin.versionDetected)  // Only show plugins with detected versions
+                        .filter((plugin: { versionDetected: boolean }) => plugin.versionDetected)
                         .map((plugin: {
                           name: string;
                           version: string;
@@ -200,12 +201,15 @@ export default function Home() {
                             <span className="text-gray-600">
                               (v{plugin.version}
                               {plugin.latestVersion && plugin.latestVersion !== plugin.version && 
-                                ` → ${plugin.latestVersion}`}
-                              )
+                                <span className="text-red-500 font-medium"> → {plugin.latestVersion}</span>
+                              })
                             </span>
-                            {plugin.isUpToDate !== undefined && (
-                              <span className="ml-2">
-                                {plugin.isUpToDate ? '✅ Ajan tasalla' : '⚠️ Päivitys saatavilla'}
+                            {(
+                              <span className="ml-2" title={plugin.isUpToDate ? 'Ajan tasalla' : 'Päivitä lisäosa uusimpaan versioon!'}>
+                                {plugin.isUpToDate !== undefined && plugin.isUpToDate ? 
+                                  '✅' : 
+                                  <span className="text-red-500">⚠️</span>
+                                }
                               </span>
                             )}
                           </li>
