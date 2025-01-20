@@ -18,6 +18,31 @@ interface Theme {
   parentTheme?: string;
 }
 
+// All version detection patterns in one place
+const PLUGIN_VERSION_PATTERNS = [
+  // Asset URLs
+  /\?ver=([0-9.]+)/,
+  /\.([0-9.]+)\.(?:min\.)?(?:js|css)/,
+  /\-([0-9.]+)\.(?:min\.)?(?:js|css)/,
+  /version[=\/-]([0-9.]+)/i,
+  // Inline scripts
+  /var\s+\w+_version\s*=\s*['"]([0-9.]+)['"]/,
+  /\.version\s*=\s*['"]([0-9.]+)['"]/,
+  /data-version=['"]([0-9.]+)['"]/,
+  // Common version declarations
+  /VERSION\s*[:=]\s*['"]([0-9.]+)['"]/i,
+  /plugin_version\s*=\s*['"]([0-9.]+)['"]/i,
+  // JSON data
+  /"version"\s*:\s*"([0-9.]+)"/,
+  // Additional patterns from StackExchange
+  /define\(['"]PLUGIN_VERSION['"],\s*['"]([0-9.]+)['"]\)/,
+  /define\(['"]VERSION['"],\s*['"]([0-9.]+)['"]\)/,
+  /\$version\s*=\s*['"]([0-9.]+)['"]/,
+  /version:\s*['"]([0-9.]+)['"]/i,
+  /@since\s+([0-9.]+)/,
+  /<!--\s*v([0-9.]+)\s*-->/,
+];
+
 async function getLatestPluginVersion(pluginSlug: string): Promise<string | null> {
   try {
     const response = await fetch(`https://api.wordpress.org/plugins/info/1.0/${pluginSlug}.json`)
@@ -258,31 +283,6 @@ async function checkPluginChangelog(baseUrl: string, pluginName: string): Promis
     return null
   }
 }
-
-// Update the plugin detection section to include more patterns
-const PLUGIN_VERSION_PATTERNS = [
-  // Asset URLs
-  /\?ver=([0-9.]+)/,
-  /\.([0-9.]+)\.(?:min\.)?(?:js|css)/,
-  /\-([0-9.]+)\.(?:min\.)?(?:js|css)/,
-  /version[=\/-]([0-9.]+)/i,
-  // Inline scripts
-  /var\s+\w+_version\s*=\s*['"]([0-9.]+)['"]/,
-  /\.version\s*=\s*['"]([0-9.]+)['"]/,
-  /data-version=['"]([0-9.]+)['"]/,
-  // Common version declarations
-  /VERSION\s*[:=]\s*['"]([0-9.]+)['"]/i,
-  /plugin_version\s*=\s*['"]([0-9.]+)['"]/i,
-  // JSON data
-  /"version"\s*:\s*"([0-9.]+)"/,
-  // Additional patterns from StackExchange
-  /define\(['"]PLUGIN_VERSION['"],\s*['"]([0-9.]+)['"]\)/,
-  /define\(['"]VERSION['"],\s*['"]([0-9.]+)['"]\)/,
-  /\$version\s*=\s*['"]([0-9.]+)['"]/,
-  /version:\s*['"]([0-9.]+)['"]/i,
-  /@since\s+([0-9.]+)/,
-  /<!--\s*v([0-9.]+)\s*-->/,
-];
 
 // Add these new detection methods
 async function checkWPAjaxForPlugins(baseUrl: string): Promise<Plugin[]> {

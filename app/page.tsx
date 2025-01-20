@@ -1,13 +1,17 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client';
 
 import { useState, useRef } from 'react';
-// @ts-expect-error (html2pdf doesn't have TypeScript types)
-import html2pdf from 'html2pdf.js';
+import dynamic from 'next/dynamic';
 import ReactMarkdown from 'react-markdown';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { tomorrow } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 
-// Update the markdown styles
+// Dynamically import html2pdf with no SSR
+const Html2pdf = dynamic(() => import('html2pdf.js'), {
+  ssr: false,
+  loading: () => null
+});
+
+// Add this CSS for markdown styling
 const markdownStyles = {
   h1: "text-2xl font-bold mb-4",
   h2: "text-xl font-semibold mb-3",
@@ -19,8 +23,23 @@ const markdownStyles = {
   strong: "font-semibold",
   em: "italic",
   blockquote: "border-l-4 border-gray-300 pl-4 my-4",
-  code: "bg-gray-100 rounded px-1.5 py-0.5 font-mono text-sm text-blue-600",
-  pre: "bg-transparent rounded p-0 mb-4 overflow-x-auto",
+  code: "bg-gray-100 rounded px-1 py-0.5 font-mono text-sm",
+  pre: "bg-gray-100 rounded p-3 mb-4 overflow-x-auto",
+};
+
+// Add a wrapper function for PDF generation
+const generatePdf = async (element: HTMLElement) => {
+  const opt = {
+    margin: 1,
+    filename: `wordpress-tarkistus-${new Date().toISOString().split('T')[0]}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2 },
+    jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
+  };
+
+  // eslint-disable-next-line
+  const html2pdf = (await import('html2pdf.js')).default;
+  return html2pdf().set(opt).from(element).save();
 };
 
 export default function Home() {
@@ -77,40 +96,32 @@ export default function Home() {
     }
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (!resultsRef.current) return;
-    
-    const element = resultsRef.current;
-    const opt = {
-      margin: 1,
-      filename: `wordpress-tarkistus-${new Date().toISOString().split('T')[0]}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2 },
-      jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
-    };
-
-    html2pdf().set(opt).from(element).save();
+    await generatePdf(resultsRef.current);
   };
 
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <h1 className="text-3xl font-bold mb-6">WordPress Sivuston Tarkistus</h1>
+    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-4 pb-20 gap-8 sm:p-8 md:p-20 font-[family-name:var(--font-geist-sans)]">
+      <main className="flex flex-col gap-8 row-start-2 items-center w-full max-w-4xl mx-auto">
+        <h1 className="text-2xl sm:text-3xl font-bold mb-2 sm:mb-6 text-center sm:text-left">
+          WordPress Sivuston Tarkistus
+        </h1>
         
-        <form onSubmit={handleSubmit} className="mb-8">
-          <div className="flex gap-4">
+        <form onSubmit={handleSubmit} className="mb-8 w-full max-w-3xl">
+          <div className="flex flex-col sm:flex-row gap-4">
             <input
               type="url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="Syötä verkkosivun osoite"
               required
-              className="flex-1 p-2 border rounded"
+              className="flex-1 p-3 border rounded shadow-sm focus:ring-2 focus:ring-blue-300 focus:border-blue-500 outline-none"
             />
             <button 
               type="submit"
               disabled={loading}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-blue-300"
+              className="px-6 py-3 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-blue-300 shadow-sm whitespace-nowrap"
             >
               {loading ? 'Tarkistetaan...' : 'Tarkista'}
             </button>
@@ -126,8 +137,8 @@ export default function Home() {
         {result && (
           <>
             <h2 className="text-xl font-semibold mb-4">Tulokset:</h2>
-            <div ref={resultsRef} className="space-y-4 w-full max-w-3xl">
-              <div className="bg-gray-50 p-6 rounded-lg shadow-sm">
+            <div ref={resultsRef} className="space-y-4 w-full">
+              <div className="bg-gray-50 p-4 sm:p-6 rounded-lg shadow-sm">
                 <div className="mb-6">
                   <h3 className="font-medium text-lg">Perustiedot</h3>
                   <div className="mt-2 space-y-2">
@@ -254,23 +265,11 @@ export default function Home() {
                           strong: ({node, ...props}) => <strong className={markdownStyles.strong} {...props} />,
                           em: ({node, ...props}) => <em className={markdownStyles.em} {...props} />,
                           blockquote: ({node, ...props}) => <blockquote className={markdownStyles.blockquote} {...props} />,
-                          code: ({node, inline, className, children, ...props}) => {
-                            const match = /language-(\w+)/.exec(className || '');
-                            return !inline ? (
-                              <SyntaxHighlighter
-                                style={tomorrow}
-                                language={match ? match[1] : 'text'}
-                                PreTag="div"
-                                className="rounded-md"
-                                {...props}
-                              >
-                                {String(children).replace(/\n$/, '')}
-                              </SyntaxHighlighter>
-                            ) : (
-                              <code className={markdownStyles.code} {...props}>
-                                {children}
-                              </code>
-                            )
+                          code: ({node, ...props}) => {
+                            const isInline = !props.className?.includes('language-');
+                            return isInline ? 
+                              <code className={markdownStyles.code} {...props} /> :
+                              <pre className={markdownStyles.pre}><code {...props} /></pre>
                           }
                         }}
                       >
@@ -284,10 +283,10 @@ export default function Home() {
 
             {/* Show export button only after analysis is complete */}
             {analysis && !analyzing && (
-              <div className="mt-8 flex justify-center w-full">
+              <div className="mt-8 flex justify-center w-full px-4 sm:px-0">
                 <button
                   onClick={handleExportPDF}
-                  className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center gap-2 shadow-sm"
+                  className="w-full sm:w-auto px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center justify-center gap-2 shadow-sm disabled:bg-green-400"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
