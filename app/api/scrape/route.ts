@@ -6,6 +6,19 @@ import semver from "semver"
 interface Plugin {
   name: string;
   version: string;
+  latestVersion?: string;
+  isUpToDate?: boolean;
+}
+
+async function getLatestPluginVersion(pluginSlug: string): Promise<string | null> {
+  try {
+    const response = await fetch(`https://api.wordpress.org/plugins/info/1.0/${pluginSlug}.json`)
+    if (!response.ok) return null
+    const data = await response.json() as { version?: string }
+    return data?.version || null
+  } catch {
+    return null
+  }
 }
 
 export async function POST(req: Request) {
@@ -162,6 +175,20 @@ export async function POST(req: Request) {
       html.includes('/wp-content/') ||
       html.includes('/wp-includes/') ||
       wpVersion !== "Unknown"
+
+    // Add version checks for plugins
+    await Promise.all(
+      plugins.map(async (plugin) => {
+        const pluginSlug = plugin.name.toLowerCase()
+        const latestVersion = await getLatestPluginVersion(pluginSlug)
+        if (latestVersion) {
+          plugin.latestVersion = latestVersion
+          plugin.isUpToDate = semver.valid(plugin.version) && semver.valid(latestVersion) 
+            ? semver.gte(plugin.version, latestVersion)
+            : undefined
+        }
+      })
+    )
 
     return NextResponse.json({
       title,

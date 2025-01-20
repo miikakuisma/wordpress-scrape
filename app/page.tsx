@@ -101,9 +101,25 @@ export default function Home() {
                 <div className="mb-6">
                   <h3 className="font-medium text-lg">Detected Plugins</h3>
                   <ul className="mt-2 space-y-1">
-                    {result.plugins.map((plugin: {name: string, version: string}, index: number) => (
-                      <li key={index}>
-                        {plugin.name} (v{plugin.version})
+                    {result.plugins.map((plugin: {
+                      name: string;
+                      version: string;
+                      latestVersion?: string;
+                      isUpToDate?: boolean;
+                    }, index: number) => (
+                      <li key={index} className="flex items-center gap-2">
+                        <span>{plugin.name}</span>
+                        <span className="text-gray-600">
+                          (v{plugin.version}
+                          {plugin.latestVersion && plugin.latestVersion !== plugin.version && 
+                            ` → ${plugin.latestVersion}`}
+                          )
+                        </span>
+                        {plugin.isUpToDate !== undefined && (
+                          <span className="ml-2">
+                            {plugin.isUpToDate ? '✅' : '⚠️'}
+                          </span>
+                        )}
                       </li>
                     ))}
                   </ul>
